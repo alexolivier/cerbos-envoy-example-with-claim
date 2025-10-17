@@ -1,0 +1,105 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Document Service",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8090"
+    }
+  ],
+  "paths": {
+    "/api/documents": {
+      "get": {
+        "summary": "List documents for the authenticated account",
+        "operationId": "listDocumentsForPrincipal",
+        "responses": {
+          "200": {
+            "description": "Documents available to the authenticated principal",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Document"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/{accountId}/documents": {
+      "get": {
+        "summary": "List documents for an account",
+        "operationId": "listDocuments",
+        "parameters": [
+          {
+            "name": "accountId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Account identifier and associated documents",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "accountID": {
+                      "type": "string"
+                    },
+                    "documents": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Document"
+                      }
+                    }
+                  },
+                  "required": [
+                    "accountID",
+                    "documents"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Document": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "accountId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "accountId",
+          "title",
+          "body"
+        ]
+      }
+    }
+  }
+}

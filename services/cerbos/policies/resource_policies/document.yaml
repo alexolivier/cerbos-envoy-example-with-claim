@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://api.cerbos.dev/latest/cerbos/policy/v1/Policy.schema.json
+apiVersion: api.cerbos.dev/v1
+resourcePolicy:
+  version: default
+  resource: document
+  importDerivedRoles:
+    - account_roles
+  rules:
+    - actions: [read]
+      effect: EFFECT_ALLOW
+      derivedRoles:
+        - account_admin
+        - account_member
+    - actions: [read]
+      effect: EFFECT_DENY
+      roles: ["*"]

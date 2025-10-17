@@ -1,0 +1,39 @@
+services:
+  cerbos:
+    image: ghcr.io/cerbos/cerbos:0.46.0
+    command:
+      - server
+      - --config=/config.yaml
+    volumes:
+      - ./services/cerbos/config.yaml:/config.yaml:ro
+      - ./services/cerbos/policies:/policies:ro
+      - ./tokens/jwt-signing.jwks.json:/certs/jwt-signing.jwks.json:ro
+    ports:
+      - "3592:3592"
+      - "3593:3593"
+
+  api:
+    build:
+      context: ./services/api
+    environment:
+      CERBOS_GRPC_ADDR: cerbos:3593
+      PORT: "8080"
+    depends_on:
+      - cerbos
+    ports:
+      - "8080:8080"
+
+  envoy:
+    build:
+      context: ./services/envoy
+    environment:
+      CERBOS_GRPC_ADDR: cerbos:3593
+      PORT: "9090"
+    depends_on:
+      - api
+      - cerbos
+    volumes:
+      - ./services/envoy/envoy.yaml:/etc/envoy/envoy.yaml:ro
+    ports:
+      - "18000:18000"
+      - "19000:19000"

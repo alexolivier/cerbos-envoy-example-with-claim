@@ -1,0 +1,11 @@
+.gocache/
+.gomodcache/
+**/.gocache/
+**/.gomodcache/
+**/bin/
+**/dist/
+.DS_Store
+tokens/jwt-signing.key
+tokens/jwt-signing.crt
+tokens/jwt-signing.pub.pem
+tokens/jwt-signing.jwks.json

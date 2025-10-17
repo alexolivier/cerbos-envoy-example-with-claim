@@ -1,0 +1,24 @@
+server:
+  httpListenAddr: ":3592"
+  grpcListenAddr: ":3593"
+  adminAPI:
+    enabled: true
+storage:
+  driver: disk
+  disk:
+    directory: /policies
+audit:
+  enabled: true
+  accessLogsEnabled: true
+  decisionLogsEnabled: true
+  backend: file
+  file:
+    path: stdout
+auxData:
+  jwt:
+    disableVerification: false
+    acceptableTimeSkew: 2s
+    keySets:
+      - id: local-dev-cert
+        local:
+          file: /certs/jwt-signing.jwks.json
