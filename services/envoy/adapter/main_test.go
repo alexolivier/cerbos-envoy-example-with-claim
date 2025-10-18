@@ -34,31 +34,6 @@ func TestExtractBearerToken(t *testing.T) {
 	})
 }
 
-func TestRolesFromClaims(t *testing.T) {
-	t.Run("array roles", func(t *testing.T) {
-		claims := &adapterClaims{Roles: []any{"admin", "member", "admin"}}
-		roles := rolesFromClaims(claims)
-		if len(roles) != 2 || roles[0] != "admin" || roles[1] != "member" {
-			t.Fatalf("unexpected roles: %#v", roles)
-		}
-	})
-
-	t.Run("string role and legacy role", func(t *testing.T) {
-		claims := &adapterClaims{Roles: "viewer", Role: "editor"}
-		roles := rolesFromClaims(claims)
-		if len(roles) != 2 || roles[0] != "viewer" || roles[1] != "editor" {
-			t.Fatalf("unexpected roles: %#v", roles)
-		}
-	})
-}
-
-func TestUniqueStringsAdapter(t *testing.T) {
-	values := uniqueStrings([]string{"", "a", "b", "a"})
-	if len(values) != 2 || values[0] != "a" || values[1] != "b" {
-		t.Fatalf("unexpected unique strings: %#v", values)
-	}
-}
-
 func TestBuildResponseHeaders(t *testing.T) {
 	outputs := []*enginev1.OutputEntry{
 		{

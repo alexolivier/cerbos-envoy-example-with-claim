@@ -35,9 +35,8 @@ const (
 )
 
 type adapterClaims struct {
-	Roles     any    `json:"roles"`
-	Role      string `json:"role"`
-	AccountID string `json:"accountId"`
+	Roles     []string `json:"roles"`
+	AccountID string   `json:"accountId"`
 	jwt.RegisteredClaims
 }
 
@@ -76,7 +75,7 @@ func (s *adapterServer) Check(ctx context.Context, req *authv3.CheckRequest) (*a
 		return denyResponse(codes.Unauthenticated, "token missing subject", typev3.StatusCode_Unauthorized), nil
 	}
 
-	roles := rolesFromClaims(claims)
+	roles := claims.Roles
 	if len(roles) == 0 {
 		return denyResponse(codes.PermissionDenied, "token missing roles claim", typev3.StatusCode_Forbidden), nil
 	}
@@ -127,50 +126,16 @@ func (s *adapterServer) Check(ctx context.Context, req *authv3.CheckRequest) (*a
 
 func parseJWT(token string) (*adapterClaims, error) {
 	claims := &adapterClaims{}
-	parser := jwt.NewParser(jwt.WithValidMethods([]string{jwtAlgRS256}))
+	parser := jwt.NewParser()
 
-	parsedToken, _, err := parser.ParseUnverified(token, claims)
+	// Validate the token claims without verifying
+	// the signature as this will be handled by Cerbos
+	_, _, err := parser.ParseUnverified(token, claims)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse token: %w", err)
 	}
 
-	if alg, _ := parsedToken.Header["alg"].(string); alg != "" && !strings.EqualFold(alg, jwtAlgRS256) {
-		return nil, fmt.Errorf("unsupported token algorithm %q", alg)
-	}
-
-	if kid, _ := parsedToken.Header["kid"].(string); kid != "" && kid != jwtKeySetID {
-		return nil, fmt.Errorf("unexpected token key ID %q", kid)
-	}
-
 	return claims, nil
-}
-
-func rolesFromClaims(claims *adapterClaims) []string {
-	if claims == nil {
-		return nil
-	}
-
-	var roles []string
-	switch v := claims.Roles.(type) {
-	case []string:
-		roles = append(roles, v...)
-	case []any:
-		for _, item := range v {
-			if str, ok := item.(string); ok && str != "" {
-				roles = append(roles, str)
-			}
-		}
-	case string:
-		if v != "" {
-			roles = append(roles, v)
-		}
-	}
-
-	if claims.Role != "" {
-		roles = append(roles, claims.Role)
-	}
-
-	return uniqueStrings(roles)
 }
 
 func allowResponse(headers []*corev3.HeaderValueOption) *authv3.CheckResponse {
@@ -207,28 +172,6 @@ func extractBearerToken(header string) (string, error) {
 	}
 
 	return parts[1], nil
-}
-
-func uniqueStrings(values []string) []string {
-	if len(values) == 0 {
-		return nil
-	}
-
-	out := make([]string, 0, len(values))
-	seen := make(map[string]struct{}, len(values))
-
-	for _, v := range values {
-		if v == "" {
-			continue
-		}
-		if _, exists := seen[v]; exists {
-			continue
-		}
-		seen[v] = struct{}{}
-		out = append(out, v)
-	}
-
-	return out
 }
 
 func main() {

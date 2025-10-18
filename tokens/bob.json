@@ -1,5 +1,5 @@
 {
   "sub": "bob",
-  "role": "user",
+  "roles": ["user"],
   "accountId": "acct-456"
 }

@@ -6,7 +6,7 @@ common downstream REST API, policy bundle, and token fixtures.
 
 ## Scenario: Envoy External Auth Adapter
 
-This scenario runs Envoy and a Go-based external authorization adapter in the same container. Envoy forwards incoming requests to the adapter via gRPC; the adapter extracts JWT claims, ensures the token metadata matches the expected signing configuration, forwards the JWT to Cerbos for verification, and then calls the Cerbos PDP for an `api_gateway` policy decision before traffic reaches the downstream API. The container uses `tini` to supervise both processes and propagate signals cleanly.
+This scenario runs Envoy and a Go-based external authorization adapter in the same container. Envoy forwards incoming requests to the adapter via gRPC; the adapter extracts JWT claims, forwards the raw JWT to Cerbos for verification, and then calls the Cerbos PDP for an `api_gateway` policy decision before traffic reaches the downstream API. The container uses `tini` to supervise both processes and propagate signals cleanly.
 
 ```mermaid
 sequenceDiagram
@@ -50,7 +50,7 @@ sequenceDiagram
 
    This launches Cerbos PDP (preloaded with the policies under `services/cerbos/policies/`), the sample API, and the combined Envoy container that bundles Envoy with the external auth adapter binary.
 
-3. Call the downstream API through Envoy using a fixture token (change `alice` to `bob`, `carol`, or even `invalid` for a denied example). The helper script signs the token with the local RSA key before Cerbos verifies it:
+3. Call the downstream API through Envoy using a fixture token (change `alice` to `bob`, `carol`, or even `invalid` for a denied example). The helper script signs the token with the local RSA key before Cerbos verifies it.
 
    ```sh
    TOKEN=$(python3 tokens/emit_token.py alice)
@@ -73,10 +73,10 @@ Stop the stack with `docker compose down` when you are done testing.
 ### Envoy external auth adapter (`services/envoy/adapter/main.go`)
 
 - Listens for Envoy ext_authz `CheckRequest` calls over gRPC (default `:9090`) and connects to Cerbos using the address from `CERBOS_GRPC_ADDR`/`CERBOS_ENDPOINT` or `cerbos:3593`.
-- Extracts the Bearer token from the incoming `Authorization` header, verifies the token header metadata (RS256 algorithm, `kid=local-dev-cert`), and reads claims without eager signature verification. The raw JWT is passed to Cerbos via `AuxDataJWT`, which performs signature validation using the configured JWKS.
-- Builds the Cerbos principal from the JWT subject and roles, accepting roles from either the `roles` claim (array/string) or the legacy `role` claim. Empty role sets are rejected.
+- Extracts the Bearer token from the incoming `Authorization` header, parses the claims without signature verification (Cerbos performs signature and key validation via the supplied JWKS), and rejects requests when the token cannot be decoded.
+- Builds the Cerbos principal from the JWT subject and the `roles` claim, which must be an array of non-empty role strings. Empty role sets are rejected.
 - Authorizes the request against the `api_gateway` resource (using the HTTP method and path) and the `route` action. Denied, unauthenticated, or invalid requests return Envoy-compatible `DeniedHttpResponse` messages with appropriate HTTP status codes.
-- When Cerbos allows the action, the adapter flattens the decision outputs into lowercase HTTP headers (e.g., `x-authz-id`, `x-authz-roles`, `x-authz-accountid`). Non-struct outputs fall back to an `output` header key.
+- When Cerbos allows the action, the adapter flattens the decision outputs into lowercase HTTP headers (e.g., `x-authz-id`, `x-authz-roles`, `x-authz-accountid`, `x-authz-foo`).
 - Gracefully handles shutdown signals and logs authorization or Cerbos connectivity errors to aid debugging.
 
 ### Cerbos policies (`services/cerbos/policies`)

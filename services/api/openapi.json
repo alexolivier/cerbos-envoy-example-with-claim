@@ -66,6 +66,13 @@
                 "schema": {
                   "type": "string"
                 }
+              },
+              "x-authz-foo": {
+                "description": "Debug header emitted by the Cerbos policy outputs.",
+                "schema": {
+                  "type": "string",
+                  "example": "bar"
+                }
               }
             },
             "content": {
@@ -75,7 +82,16 @@
                   "items": {
                     "$ref": "#/components/schemas/Document"
                   }
-                }
+                },
+                "example": [
+                  {
+                    "id": "doc-2",
+                    "accountId": "acct-123",
+                    "title": "Team roster",
+                    "body": "Contacts for the team assigned to acct-123.",
+                    "status": "published"
+                  }
+                ]
               }
             }
           },
@@ -148,6 +164,13 @@
                 "schema": {
                   "type": "string"
                 }
+              },
+              "x-authz-foo": {
+                "description": "Debug header emitted by the Cerbos policy outputs.",
+                "schema": {
+                  "type": "string",
+                  "example": "bar"
+                }
               }
             },
             "content": {
@@ -170,6 +193,32 @@
                   "required": [
                     "accountID",
                     "documents"
+                  ]
+                },
+                "example": {
+                  "accountID": "acct-123",
+                  "documents": [
+                    {
+                      "id": "doc-1",
+                      "accountId": "acct-123",
+                      "title": "Quarterly plan",
+                      "body": "Internal roadmap for acct-123.",
+                      "status": "draft"
+                    },
+                    {
+                      "id": "doc-2",
+                      "accountId": "acct-123",
+                      "title": "Team roster",
+                      "body": "Contacts for the team assigned to acct-123.",
+                      "status": "published"
+                    },
+                    {
+                      "id": "doc-3",
+                      "accountId": "acct-456",
+                      "title": "Budget",
+                      "body": "Budget for acct-456.",
+                      "status": "archived"
+                    }
                   ]
                 }
               }

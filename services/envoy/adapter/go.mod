@@ -19,7 +19,7 @@ require (
 	filippo.io/age v1.2.1 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
 	github.com/bits-and-blooms/bitset v1.20.0 // indirect
-	github.com/cerbos/cerbos/api/genpb v0.46.0 // indirect
+	github.com/cerbos/cerbos/api/genpb v0.46.0
 	github.com/cerbos/cloud-api v0.1.59 // indirect
 	github.com/cncf/xds/go v0.0.0-20250501225837-2ac532fd4443 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
