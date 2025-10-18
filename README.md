@@ -6,7 +6,7 @@ common downstream REST API, policy bundle, and token fixtures.
 
 ## Scenario: Envoy External Auth Adapter
 
-This scenario runs Envoy and a Go-based external authorization adapter in the same container. Envoy forwards incoming requests to the adapter via gRPC; the adapter extracts JWT claims, forwards the raw JWT to Cerbos for verification, and then calls the Cerbos PDP for an `api_gateway` policy decision before traffic reaches the downstream API. The Cerbos gateway policy enforces that non-admin users can only route to `/api/{accountId}/documents` paths that match the `accountId` claim, while admins can reach any route. Only requests allowed by the gateway policy are forwarded to the downstream API where document-level checks are performed.
+This scenario runs Envoy and a Go-based external authorization adapter in the same container. Envoy forwards incoming requests to the adapter via gRPC; the adapter extracts JWT claims, forwards the raw JWT to Cerbos for verification, and then calls the Cerbos PDP for an `api_gateway` policy decision before traffic reaches the downstream API. That gateway decision enforces route-level authorization: non-admin users can only reach `/api/{accountId}/documents` paths that match the token `accountId`, while admins can reach any route (including `/api/admin`). When a request is allowed through Envoy, the downstream API performs a second check against the same Cerbos PDP using the `document` policy to filter individual documents by account ownership and publication status. The result is multi-layer authorization—route-based at the edge, resource-based in the service—without duplicating policy logic.
 
 ```mermaid
 sequenceDiagram
