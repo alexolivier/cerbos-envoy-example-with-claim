@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -81,9 +82,6 @@ func (s *adapterServer) Check(ctx context.Context, req *authv3.CheckRequest) (*a
 	}
 
 	principal := cerbos.NewPrincipal(principalID, roles...)
-	if claims.AccountID != "" {
-		principal = principal.WithAttr("accountId", claims.AccountID)
-	}
 	if err := principal.Validate(); err != nil {
 		return denyResponse(codes.InvalidArgument, fmt.Sprintf("invalid principal: %v", err), typev3.StatusCode_BadRequest), nil
 	}
@@ -91,12 +89,6 @@ func (s *adapterServer) Check(ctx context.Context, req *authv3.CheckRequest) (*a
 	resourceAttrs := map[string]any{
 		"path":   path,
 		"method": method,
-	}
-	if accountIDs := accountIDsFromPath(path); len(accountIDs) > 0 {
-		resourceAttrs["accountId"] = accountIDs
-	}
-	if len(headers) > 0 {
-		resourceAttrs["headers"] = headers
 	}
 
 	resource := cerbos.NewResource("api_gateway", path).WithAttributes(resourceAttrs)
@@ -217,16 +209,6 @@ func extractBearerToken(header string) (string, error) {
 	return parts[1], nil
 }
 
-func accountIDsFromPath(path string) []string {
-	path = strings.SplitN(path, "?", 2)[0]
-	segments := strings.Split(strings.Trim(path, "/"), "/")
-	if len(segments) >= 3 && segments[0] == "api" {
-		return []string{segments[1]}
-	}
-
-	return nil
-}
-
 func uniqueStrings(values []string) []string {
 	if len(values) == 0 {
 		return nil
@@ -344,15 +326,17 @@ func stringifyValue(val *structpb.Value) string {
 		return ""
 	}
 
-	switch val.Kind.(type) {
-	case *structpb.Value_StringValue:
-		return val.GetStringValue()
-	case *structpb.Value_NumberValue:
-		return fmt.Sprintf("%v", val.GetNumberValue())
-	case *structpb.Value_BoolValue:
-		return fmt.Sprintf("%t", val.GetBoolValue())
+	switch v := val.AsInterface().(type) {
+	case string:
+		return v
+	case float64:
+		return strconv.FormatFloat(v, 'f', -1, 64)
+	case bool:
+		return strconv.FormatBool(v)
+	case nil:
+		return ""
 	default:
-		bytes, err := json.Marshal(val.AsInterface())
+		bytes, err := json.Marshal(v)
 		if err != nil {
 			return ""
 		}

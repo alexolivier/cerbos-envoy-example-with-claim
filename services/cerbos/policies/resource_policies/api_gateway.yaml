@@ -18,7 +18,7 @@ resourcePolicy:
       output:
         when:
           ruleActivated: |-
-            {"x-authz-accountId": request.auxData.jwt.accountId, "x-authz-foo": "bar"}
+            {"x-authz-accountId": request.auxData.jwt.accountId, "x-authz-id": request.principal.id, "x-authz-roles": request.principal.roles, "x-authz-foo": "bar"}
 
     - name: allow-profiles
       actions: [route]
@@ -32,4 +32,4 @@ resourcePolicy:
       output:
         when:
           ruleActivated: |-
-            {"x-authz-accountId": request.auxData.jwt.accountId, "x-authz-foo": "bar"}
+            {"x-authz-accountId": request.auxData.jwt.accountId, "x-authz-id": request.principal.id, "x-authz-roles": request.principal.roles, "x-authz-baz": "qux"}
