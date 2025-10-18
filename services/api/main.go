@@ -42,9 +42,6 @@ var authzClient = &cerbosClient{}
 func newCerbosClient() *cerbosClient {
 	addr := os.Getenv("CERBOS_GRPC_ADDR")
 	if addr == "" {
-		addr = os.Getenv("CERBOS_ENDPOINT")
-	}
-	if addr == "" {
 		addr = "cerbos:3593"
 	}
 

@@ -185,9 +185,6 @@ func main() {
 
 	cerbosAddr := strings.TrimSpace(os.Getenv("CERBOS_GRPC_ADDR"))
 	if cerbosAddr == "" {
-		cerbosAddr = strings.TrimSpace(os.Getenv("CERBOS_ENDPOINT"))
-	}
-	if cerbosAddr == "" {
 		cerbosAddr = defaultCerbosAddr
 	}
 
