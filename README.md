@@ -1,12 +1,15 @@
-# Cerbos + Envoy architecture demos
+# Cerbos + Envoy Unified Authorization Demo
 
-This repository showcases multiple ways to integrate Envoy with Cerbos using a small
-Go-based sample application. Each scenario runs under Docker Compose and shares a
-common downstream REST API, policy bundle, and token fixtures.
+This repository demonstrates how a single Cerbos policy decision point (PDP) can enforce authorization consistently at two layers:
 
-## Scenario: Envoy External Auth Adapter
+- **Ingress (Envoy ext_authz filter):** Envoy delegates authentication and coarse-grained route authorization to a gRPC adapter that calls Cerbos.
+- **Application (Go API):** The downstream service reuses the same Cerbos policies for fine-grained document filtering.
 
-This scenario runs Envoy and a Go-based external authorization adapter in the same container. Envoy forwards incoming requests to the adapter via gRPC; the adapter extracts JWT claims, forwards the raw JWT to Cerbos for verification, and then calls the Cerbos PDP for an `api_gateway` policy decision before traffic reaches the downstream API. That gateway decision enforces route-level authorization: non-admin users can only reach `/api/{accountId}/documents` paths that match the token `accountId`, while admins can reach any route (including `/api/admin`). When a request is allowed through Envoy, the downstream API performs a second check against the same Cerbos PDP using the `document` policy to filter individual documents by account ownership and publication status. The result is multi-layer authorization—route-based at the edge, resource-based in the service—without duplicating policy logic.
+The result is an end-to-end architecture where policy logic lives once, while both edge and service layers receive real-time decisions and correlated audit output.
+
+> **Production note:** This demo uses locally mounted policy bundles for convenience. In production, the PDP would connect to [Cerbos Hub](https://cerbos.dev/hub) to fetch signed policies and stream decision audit logs to your observability platform.
+
+## Architecture Overview
 
 ```mermaid
 sequenceDiagram
@@ -32,6 +35,19 @@ sequenceDiagram
         Envoy-->>Client: 401/403/503 with adapter body
     end
 ```
+
+### Why this pattern matters
+
+- **Single policy surface:** Both Envoy and the application enforce the same policies and attribute vocabulary, eliminating drift between perimeter and service layers.
+- **Defense in depth without duplication:** Coarse authorization (route) and fine-grained decisions (document-level) reuse shared logic.
+- **Operational simplicity:** In production, Cerbos Hub delivers policy versioning, drift detection, and central audit trails for regulatory review.
+- **Pluggable trust:** The adapter forwards raw JWTs to Cerbos for signature verification so the gateway or the api needs to implement this logic.
+
+## Policy Flow in Detail
+
+- **Envoy external auth:** The adapter validates JWT headers, forwards the untouched token to Cerbos for signature verification, and requests a decision on the `api_gateway` policy. Denied requests never reach the API.
+- **Downstream API:** Allowed requests inherit headers such as `x-authz-id`, `x-authz-roles`, and `x-authz-accountId`. The API scopes its dataset by `accountID`, then calls Cerbos for the `document` policy to filter individual records.
+- **Consistent context:** Both layers evaluate the same subject attributes and enrich decisions with policy-defined outputs, ensuring deterministic enforcement regardless of where access is evaluated.
 
 ### Running the example
 
