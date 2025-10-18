@@ -39,6 +39,15 @@ static_resources:
                       domains: ["*"]
                       routes:
                         - match:
+                            path: "/healthz"
+                          route:
+                            cluster: api_service
+                            timeout: 0s
+                          typed_per_filter_config:
+                            envoy.filters.http.ext_authz:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthzPerRoute
+                              disabled: true
+                        - match:
                             prefix: "/"
                           route:
                             cluster: api_service

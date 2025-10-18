@@ -15,7 +15,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22.x'
+          go-version: '1.25.x'
 
       - name: Run adapter unit tests
         working-directory: services/envoy/adapter
@@ -23,4 +23,8 @@ jobs:
 
       - name: Run API unit tests
         working-directory: services/api
+        run: go test ./...
+
+      - name: Run end-to-end integration tests
+        working-directory: tests/e2e
         run: go test ./...
