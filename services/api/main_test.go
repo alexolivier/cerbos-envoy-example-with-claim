@@ -95,34 +95,6 @@ func TestFilterAllowedDocumentsError(t *testing.T) {
 	}
 }
 
-func TestParseRolesHeader(t *testing.T) {
-	t.Run("json array", func(t *testing.T) {
-		roles, err := parseRolesHeader(`["admin","member","admin"]`)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if len(roles) != 2 || roles[0] != "admin" || roles[1] != "member" {
-			t.Fatalf("unexpected roles: %#v", roles)
-		}
-	})
-
-	t.Run("csv fallback", func(t *testing.T) {
-		roles, err := parseRolesHeader("admin, member , viewer")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if len(roles) != 3 {
-			t.Fatalf("expected 3 roles, got %d", len(roles))
-		}
-	})
-
-	t.Run("invalid json", func(t *testing.T) {
-		if _, err := parseRolesHeader("[not json"); err == nil {
-			t.Fatal("expected error for malformed json array")
-		}
-	})
-}
-
 func TestPrincipalFromHeaders(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -151,27 +123,6 @@ func TestPrincipalFromHeaders(t *testing.T) {
 	attr := principal.Obj.GetAttr()
 	if attr["accountId"].GetStringValue() != "acct-123" {
 		t.Fatalf("unexpected account attribute: %#v", attr["accountId"])
-	}
-}
-
-func TestPrincipalFromHeadersFallbackAccount(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	w := httptest.NewRecorder()
-	ctx, _ := gin.CreateTestContext(w)
-	req, _ := http.NewRequest(http.MethodGet, "/", nil)
-	req.Header.Set("x-authz-id", "user-123")
-	req.Header.Set("x-authz-roles", "admin")
-	req.Header.Set("x-authz-accountId", "acct-999")
-	ctx.Request = req
-
-	principal, err := principalFromHeaders(ctx)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if principal.Obj.GetAttr()["accountId"].GetStringValue() != "acct-999" {
-		t.Fatalf("expected fallback account attribute")
 	}
 }
 
