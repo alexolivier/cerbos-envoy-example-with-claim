@@ -3,14 +3,21 @@ apiVersion: api.cerbos.dev/v1
 resourcePolicy:
   version: default
   resource: document
-  importDerivedRoles:
-    - account_roles
   rules:
-    - actions: [read]
+    - name: allow-read-account-published-documents
+      actions: [read]
       effect: EFFECT_ALLOW
-      derivedRoles:
-        - account_admin
-        - account_member
-    - actions: [read]
-      effect: EFFECT_DENY
-      roles: ["*"]
+      roles:
+        - "user"
+      condition:
+        match:
+          all:
+            of:
+              - expr: request.principal.attr.accountId in request.resource.attr.accountId
+              - expr: request.resource.attr.status == "published"
+
+    - name: allow-read-admin-documents
+      actions: [read]
+      effect: EFFECT_ALLOW
+      roles:
+        - "admin"

@@ -20,12 +20,13 @@ type Document struct {
 	AccountID string `json:"accountId"`
 	Title     string `json:"title"`
 	Body      string `json:"body"`
+	Status    string `json:"status"`
 }
 
 var documents = []Document{
-	{ID: "doc-1", AccountID: "acct-123", Title: "Quarterly plan", Body: "Internal roadmap for acct-123."},
-	{ID: "doc-2", AccountID: "acct-123", Title: "Team roster", Body: "Contacts for the team assigned to acct-123."},
-	{ID: "doc-3", AccountID: "acct-456", Title: "Budget", Body: "Budget for acct-456."},
+	{ID: "doc-1", AccountID: "acct-123", Title: "Quarterly plan", Body: "Internal roadmap for acct-123.", Status: "draft"},
+	{ID: "doc-2", AccountID: "acct-123", Title: "Team roster", Body: "Contacts for the team assigned to acct-123.", Status: "published"},
+	{ID: "doc-3", AccountID: "acct-456", Title: "Budget", Body: "Budget for acct-456.", Status: "archived"},
 }
 
 type cerbosChecker interface {
@@ -68,6 +69,7 @@ func (c *cerbosClient) filterAllowedDocuments(ctx context.Context, principal *ce
 	for _, doc := range docs {
 		resource := cerbos.NewResource("document", doc.ID).WithAttributes(map[string]any{
 			"accountId": []string{doc.AccountID},
+			"status":    doc.Status,
 		})
 
 		if err := resource.Validate(); err != nil {
@@ -138,9 +140,6 @@ func main() {
 			return
 		}
 
-		if accountID := c.GetHeader("x-accountId"); accountID != "" {
-			c.Header("x-accountId", accountID)
-		}
 		mirrorHeadersWithPrefix(c, "x-authz-")
 		c.JSON(http.StatusOK, allowedDocs)
 	})
@@ -152,16 +151,12 @@ func main() {
 			return
 		}
 
-		if headerAccountID := c.GetHeader("x-auth-accountId"); headerAccountID != "" {
-			c.Header("x-auth-accountId", headerAccountID)
-		}
 		mirrorHeadersWithPrefix(c, "x-authz-")
 
 		authCtx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
 		defer cancel()
 
-		filteredDocs := filterDocumentsByAccountID(accountID)
-		allowedDocs, err := authzClient.filterAllowedDocuments(authCtx, principal, filteredDocs, "read")
+		allowedDocs, err := authzClient.filterAllowedDocuments(authCtx, principal, documents, "read")
 		if err != nil {
 			log.Printf("authorization error: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "authorization failure"})
@@ -182,16 +177,6 @@ func main() {
 	if err := router.Run(addr); err != nil {
 		log.Fatal(err)
 	}
-}
-
-func filterDocumentsByAccountID(accountID string) []Document {
-	var filtered []Document
-	for _, doc := range documents {
-		if doc.AccountID == accountID {
-			filtered = append(filtered, doc)
-		}
-	}
-	return filtered
 }
 
 func mirrorHeadersWithPrefix(c *gin.Context, prefix string) {

@@ -3,33 +3,34 @@ apiVersion: api.cerbos.dev/v1
 resourcePolicy:
   version: default
   resource: api_gateway
-  importDerivedRoles:
-    - account_roles
+  variables:
+    local:
+      responseHeaders: |-
+        {
+          "x-authz-accountId": request.auxData.jwt.accountId,
+          "x-authz-id": request.principal.id,
+          "x-authz-roles": request.principal.roles,
+          "x-authz-foo": "bar"
+        }
   rules:
-    - name: allow-documents
+    - name: allow-user-account-documents
       actions: [route]
       effect: EFFECT_ALLOW
       roles:
-        - admin
         - user
       condition:
         match:
-          expr: request.resource.attr.path == "/api/documents"
+          # Allow access to documents for the user's account based on token accountId claim
+          expr: request.resource.attr.path.startsWith("/api/" + request.auxData.jwt.accountId + "/documents")
       output:
         when:
-          ruleActivated: |-
-            {"x-authz-accountId": request.auxData.jwt.accountId, "x-authz-id": request.principal.id, "x-authz-roles": request.principal.roles, "x-authz-foo": "bar"}
+          ruleActivated: V.responseHeaders
 
-    - name: allow-profiles
+    - name: allow-admin-all-routes
       actions: [route]
       effect: EFFECT_ALLOW
       roles:
         - admin
-        - user
-      condition:
-        match:
-          expr: request.resource.attr.path == "/api/profiles"
       output:
         when:
-          ruleActivated: |-
-            {"x-authz-accountId": request.auxData.jwt.accountId, "x-authz-id": request.principal.id, "x-authz-roles": request.principal.roles, "x-authz-baz": "qux"}
+          ruleActivated: V.responseHeaders

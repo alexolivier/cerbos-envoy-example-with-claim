@@ -1,8 +1,6 @@
 server:
   httpListenAddr: ":3592"
   grpcListenAddr: ":3593"
-  adminAPI:
-    enabled: true
 storage:
   driver: disk
   disk:

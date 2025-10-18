@@ -6,17 +6,68 @@
   },
   "servers": [
     {
-      "url": "http://localhost:8090"
+      "url": "http://localhost:8080"
     }
   ],
   "paths": {
-    "/api/documents": {
+    "/healthz": {
       "get": {
-        "summary": "List documents for the authenticated account",
-        "operationId": "listDocumentsForPrincipal",
+        "summary": "Readiness probe",
+        "operationId": "healthz",
         "responses": {
           "200": {
-            "description": "Documents available to the authenticated principal",
+            "description": "Service is ready to receive traffic",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string",
+                  "example": "ok"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/documents": {
+      "get": {
+        "summary": "List documents accessible to the current principal",
+        "description": "Requires the adapter-forwarded `x-authz-id` and `x-authz-roles` headers. Optional account context is extracted from either `x-authz-accountId` or `z-authz-accountId` when present.",
+        "operationId": "listDocumentsForPrincipal",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PrincipalIdHeader"
+          },
+          {
+            "$ref": "#/components/parameters/PrincipalRolesHeader"
+          },
+          {
+            "$ref": "#/components/parameters/PrincipalAccountHeader"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Documents the principal is permitted to read",
+            "headers": {
+              "x-authz-id": {
+                "description": "Mirrored from the request when provided.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "x-authz-roles": {
+                "description": "Mirrored from the request when provided.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "x-authz-accountid": {
+                "description": "Mirrored from the request or populated by the adapter when available.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -27,13 +78,34 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Authentication headers were missing or invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Authorization decision could not be obtained",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
     },
     "/api/{accountId}/documents": {
       "get": {
-        "summary": "List documents for an account",
+        "summary": "List documents for a provided account context",
+        "description": "Returns the filtered document list alongside the path parameter. The account identifier is echoed but does not further restrict the document list.",
         "operationId": "listDocuments",
         "parameters": [
           {
@@ -42,31 +114,83 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
+            },
+            "description": "Account identifier to include in the response payload."
+          },
+          {
+            "$ref": "#/components/parameters/PrincipalIdHeader"
+          },
+          {
+            "$ref": "#/components/parameters/PrincipalRolesHeader"
+          },
+          {
+            "$ref": "#/components/parameters/PrincipalAccountHeader"
           }
         ],
         "responses": {
           "200": {
-            "description": "Account identifier and associated documents",
+            "description": "Account identifier and the documents the principal can view",
+            "headers": {
+              "x-authz-id": {
+                "description": "Mirrored from the request when provided.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "x-authz-roles": {
+                "description": "Mirrored from the request when provided.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "x-authz-accountid": {
+                "description": "Mirrored from the request or populated by the adapter when available.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
                     "accountID": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Echoes the `accountId` path parameter."
                     },
                     "documents": {
                       "type": "array",
                       "items": {
                         "$ref": "#/components/schemas/Document"
-                      }
+                      },
+                      "description": "Documents the principal is permitted to read."
                     }
                   },
                   "required": [
                     "accountID",
                     "documents"
                   ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication headers were missing or invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Authorization decision could not be obtained",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -81,24 +205,74 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "type": "string",
+            "description": "Document identifier."
           },
           "accountId": {
-            "type": "string"
+            "type": "string",
+            "description": "Owning account identifier."
           },
           "title": {
-            "type": "string"
+            "type": "string",
+            "description": "Document title."
           },
           "body": {
-            "type": "string"
+            "type": "string",
+            "description": "Document body."
+          },
+          "status": {
+            "type": "string",
+            "description": "Document state such as draft, published, or archived."
           }
         },
         "required": [
           "id",
           "accountId",
           "title",
-          "body"
+          "body",
+          "status"
         ]
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Human-readable error message."
+          }
+        },
+        "required": [
+          "error"
+        ]
+      }
+    },
+    "parameters": {
+      "PrincipalIdHeader": {
+        "name": "x-authz-id",
+        "in": "header",
+        "required": true,
+        "description": "Unique principal identifier forwarded by the Envoy adapter.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "PrincipalRolesHeader": {
+        "name": "x-authz-roles",
+        "in": "header",
+        "required": true,
+        "description": "Roles forwarded by the Envoy adapter. Accepts either a JSON array (e.g. `[\"admin\",\"editor\"]`) or a comma-separated string.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "PrincipalAccountHeader": {
+        "name": "x-authz-accountId",
+        "in": "header",
+        "required": false,
+        "description": "Optional account context derived from the adapter. The API also accepts `z-authz-accountId` when Envoy remaps the header.",
+        "schema": {
+          "type": "string"
+        }
       }
     }
   }
