@@ -28,11 +28,15 @@ var documents = []Document{
 	{ID: "doc-3", AccountID: "acct-456", Title: "Budget", Body: "Budget for acct-456."},
 }
 
-type cerbosClient struct {
-	client *cerbos.GRPCClient
+type cerbosChecker interface {
+	CheckResources(ctx context.Context, principal *cerbos.Principal, resourceBatch *cerbos.ResourceBatch) (*cerbos.CheckResourcesResponse, error)
 }
 
-var authzClient = newCerbosClient()
+type cerbosClient struct {
+	checker cerbosChecker
+}
+
+var authzClient = &cerbosClient{}
 
 func newCerbosClient() *cerbosClient {
 	addr := os.Getenv("CERBOS_GRPC_ADDR")
@@ -48,10 +52,14 @@ func newCerbosClient() *cerbosClient {
 		log.Fatalf("failed to create Cerbos client: %v", err)
 	}
 
-	return &cerbosClient{client: client}
+	return &cerbosClient{checker: client}
 }
 
 func (c *cerbosClient) filterAllowedDocuments(ctx context.Context, principal *cerbos.Principal, docs []Document, action string) ([]Document, error) {
+	if c == nil || c.checker == nil {
+		return nil, errors.New("cerbos checker not configured")
+	}
+
 	if len(docs) == 0 {
 		return []Document{}, nil
 	}
@@ -73,7 +81,7 @@ func (c *cerbosClient) filterAllowedDocuments(ctx context.Context, principal *ce
 		return nil, fmt.Errorf("invalid resource batch: %w", err)
 	}
 
-	checkResp, err := c.client.CheckResources(ctx, principal, resourceBatch)
+	checkResp, err := c.checker.CheckResources(ctx, principal, resourceBatch)
 	if err != nil {
 		return nil, fmt.Errorf("authorization check failed: %w", err)
 	}
@@ -102,6 +110,8 @@ func main() {
 	if value := os.Getenv("PORT"); value != "" {
 		addr = ":" + value
 	}
+
+	authzClient = newCerbosClient()
 
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
