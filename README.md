@@ -6,15 +6,15 @@ common downstream REST API, policy bundle, and token fixtures.
 
 ## Scenario: Envoy External Auth Adapter
 
-This scenario runs Envoy and a Go-based external authorization adapter in the same container. Envoy forwards incoming requests to the adapter via gRPC; the adapter extracts JWT claims, forwards the raw JWT to Cerbos for verification, and then calls the Cerbos PDP for an `api_gateway` policy decision before traffic reaches the downstream API. The Cerbos gateway policy enforces that non-admin users can only route to `/api/{accountId}/documents` paths that match the `accountId` claim, while admins can reach any route. The container uses `tini` to supervise both processes and propagate signals cleanly, and only requests allowed by the gateway policy are forwarded to the downstream API where document-level checks are performed.
+This scenario runs Envoy and a Go-based external authorization adapter in the same container. Envoy forwards incoming requests to the adapter via gRPC; the adapter extracts JWT claims, forwards the raw JWT to Cerbos for verification, and then calls the Cerbos PDP for an `api_gateway` policy decision before traffic reaches the downstream API. The Cerbos gateway policy enforces that non-admin users can only route to `/api/{accountId}/documents` paths that match the `accountId` claim, while admins can reach any route. Only requests allowed by the gateway policy are forwarded to the downstream API where document-level checks are performed.
 
 ```mermaid
 sequenceDiagram
     participant Client
     participant Envoy as Envoy ext_authz filter
     participant Adapter as Envoy adapter (gRPC)
-    participant Cerbos as Cerbos PDP
     participant API as Downstream API
+    participant Cerbos as Cerbos PDP
 
     Client->>Envoy: HTTP request<br/>Authorization: Bearer JWT
     Envoy->>Adapter: gRPC CheckRequest (path, method, headers)
@@ -24,6 +24,8 @@ sequenceDiagram
     Adapter-->>Envoy: CheckResponse (decision + headers)
     alt Allowed
         Envoy->>API: Forward request with mirrored x-authz-* headers
+        API->>Cerbos: CheckResources(document, read)<br/>accountId + doc.status
+        Cerbos-->>API: Document decisions
         API-->>Envoy: Filtered documents / errors
         Envoy-->>Client: HTTP response
     else Denied / Error
@@ -89,53 +91,96 @@ Stop the stack with `docker compose down` when you are done testing.
 
 Mint a JWT for each principal with `TOKEN=$(python3 tokens/emit_token.py <alice|bob|carol>)` and call Envoy at `http://localhost:18000`. Successful responses echo the `x-authz-*` headers that Envoy receives from the adapter. After the Docker stack is running, execute `./test.sh` to hit all routes for every token and print the HTTP status plus JSON body.
 
-| Token (roles) | Route | Gateway behaviour | Service result |
-|---------------|-------|-------------------|----------------|
-| `alice` (`user`, `acct-123`) | `/api/acct-123/documents` | Allowed – path matches JWT `accountId` | Returns only the published document for `acct-123` |
-| `alice` (`user`, `acct-123`) | `/api/acct-456/documents` | Denied – account mismatch | `403` with `access denied` |
-| `alice` (`user`, `acct-123`) | `/api/admin` | Denied – requires `admin` role | `403` with `access denied` |
-| `bob` (`user`, `acct-456`) | `/api/acct-123/documents` | Denied – account mismatch | `403` with `access denied` |
-| `bob` (`user`, `acct-456`) | `/api/acct-456/documents` | Allowed – path matches JWT `accountId` | Returns empty list (`archived` doc filtered) |
-| `bob` (`user`, `acct-456`) | `/api/admin` | Denied – requires `admin` role | `403` with `access denied` |
-| `carol` (`admin`, `acct-123`) | `/api/acct-123/documents` | Allowed – admins bypass account check | Returns draft + published documents for `acct-123` |
-| `carol` (`admin`, `acct-123`) | `/api/acct-456/documents` | Allowed – admins bypass account check | Returns archived document for `acct-456` |
-| `carol` (`admin`, `acct-123`) | `/api/admin` | Allowed – admin-only route | Returns `{"message":"admin access granted"}` |
+| Token (roles)                 | Route                     | Gateway behaviour                      | Service result                                     |
+| ----------------------------- | ------------------------- | -------------------------------------- | -------------------------------------------------- |
+| `alice` (`user`, `acct-123`)  | `/api/acct-123/documents` | Allowed – path matches JWT `accountId` | Returns only the published document for `acct-123` |
+| `alice` (`user`, `acct-123`)  | `/api/acct-456/documents` | Denied – account mismatch              | `403` with `access denied`                         |
+| `alice` (`user`, `acct-123`)  | `/api/admin`              | Denied – requires `admin` role         | `403` with `access denied`                         |
+| `bob` (`user`, `acct-456`)    | `/api/acct-123/documents` | Denied – account mismatch              | `403` with `access denied`                         |
+| `bob` (`user`, `acct-456`)    | `/api/acct-456/documents` | Allowed – path matches JWT `accountId` | Returns empty list (`archived` doc filtered)       |
+| `bob` (`user`, `acct-456`)    | `/api/admin`              | Denied – requires `admin` role         | `403` with `access denied`                         |
+| `carol` (`admin`, `acct-123`) | `/api/acct-123/documents` | Allowed – admins bypass account check  | Returns draft + published documents for `acct-123` |
+| `carol` (`admin`, `acct-123`) | `/api/acct-456/documents` | Allowed – admins bypass account check  | Returns archived document for `acct-456`           |
+| `carol` (`admin`, `acct-123`) | `/api/admin`              | Allowed – admin-only route             | Returns `{"message":"admin access granted"}`       |
 
 **alice** (`roles: ["user"]`, `accountId: acct-123`)
+
 - `/api/acct-123/documents` — gateway allows the request because the path matches the token `accountId`; the downstream service hides the draft document and returns only the published record.
 
   ```json
-  {"accountID":"acct-123","documents":[{"id":"doc-2","accountId":"acct-123","title":"Team roster","body":"Contacts for the team assigned to acct-123.","status":"published"}]}
+  {
+    "accountID": "acct-123",
+    "documents": [
+      {
+        "id": "doc-2",
+        "accountId": "acct-123",
+        "title": "Team roster",
+        "body": "Contacts for the team assigned to acct-123.",
+        "status": "published"
+      }
+    ]
+  }
   ```
 
 - `/api/acct-456/documents` — gateway denies the request before it reaches the service because the path account does not match the JWT claim → `403 Forbidden` body `access denied`.
 - `/api/admin` — gateway denies the request because the `user` role is not permitted on the admin route → `403 Forbidden` body `access denied`.
 
 **bob** (`roles: ["user"]`, `accountId: acct-456`)
+
 - `/api/acct-123/documents` — gateway blocks the request due to the account mismatch → `403 Forbidden` body `access denied`.
 - `/api/acct-456/documents` — gateway allows the request (account matches) but the service filters out the only document because it is `archived`, so the response contains an empty list.
 
   ```json
-  {"accountID":"acct-456","documents":[]}
+  { "accountID": "acct-456", "documents": [] }
   ```
 
 - `/api/admin` — gateway denies the request because the `user` role cannot reach the admin route → `403 Forbidden` body `access denied`.
 
 **carol** (`roles: ["admin"]`, `accountId: acct-123`)
+
 - `/api/acct-123/documents` — gateway allows all routes for admins and the service returns both the draft and published documents for the requested account.
 
   ```json
-  {"accountID":"acct-123","documents":[{"id":"doc-1","accountId":"acct-123","title":"Quarterly plan","body":"Internal roadmap for acct-123.","status":"draft"},{"id":"doc-2","accountId":"acct-123","title":"Team roster","body":"Contacts for the team assigned to acct-123.","status":"published"}]}
+  {
+    "accountID": "acct-123",
+    "documents": [
+      {
+        "id": "doc-1",
+        "accountId": "acct-123",
+        "title": "Quarterly plan",
+        "body": "Internal roadmap for acct-123.",
+        "status": "draft"
+      },
+      {
+        "id": "doc-2",
+        "accountId": "acct-123",
+        "title": "Team roster",
+        "body": "Contacts for the team assigned to acct-123.",
+        "status": "published"
+      }
+    ]
+  }
   ```
 
 - `/api/acct-456/documents` — gateway allows the cross-account request for the admin and the service returns the archived document from `acct-456`.
 
   ```json
-  {"accountID":"acct-456","documents":[{"id":"doc-3","accountId":"acct-456","title":"Budget","body":"Budget for acct-456.","status":"archived"}]}
+  {
+    "accountID": "acct-456",
+    "documents": [
+      {
+        "id": "doc-3",
+        "accountId": "acct-456",
+        "title": "Budget",
+        "body": "Budget for acct-456.",
+        "status": "archived"
+      }
+    ]
+  }
   ```
 
 - `/api/admin` — gateway allows the admin-only route and the downstream service echoes the success payload.
 
   ```json
-  {"message":"admin access granted"}
+  { "message": "admin access granted" }
   ```
