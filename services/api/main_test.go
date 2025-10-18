@@ -67,7 +67,7 @@ func TestFilterAllowedDocuments(t *testing.T) {
 		t.Fatalf("validate principal: %v", err)
 	}
 
-	allowed, err := client.filterAllowedDocuments(context.Background(), principal, docs, "read")
+	allowed, err := client.filterAllowedDocuments(context.Background(), principal, docs, "acct-1", "read")
 	if err != nil {
 		t.Fatalf("filterAllowedDocuments returned error: %v", err)
 	}
@@ -89,7 +89,7 @@ func TestFilterAllowedDocumentsError(t *testing.T) {
 	client := &cerbosClient{checker: &fakeCerbosChecker{err: errors.New("pdp unavailable")}}
 	principal := cerbos.NewPrincipal("user-1", "admin")
 
-	_, err := client.filterAllowedDocuments(context.Background(), principal, []Document{{ID: "doc-1", AccountID: "acct"}}, "read")
+	_, err := client.filterAllowedDocuments(context.Background(), principal, []Document{{ID: "doc-1", AccountID: "acct"}}, "acct", "read")
 	if err == nil || err.Error() != "authorization check failed: pdp unavailable" {
 		t.Fatalf("expected wrapped error, got %v", err)
 	}
@@ -175,13 +175,6 @@ func TestPrincipalFromHeadersFallbackAccount(t *testing.T) {
 	}
 }
 
-func TestUniqueStrings(t *testing.T) {
-	values := uniqueStrings([]string{"a", "b", "a", " ", "", "c"})
-	if len(values) != 3 {
-		t.Fatalf("expected 3 unique values, got %d", len(values))
-	}
-}
-
 func TestFilterAllowedDocumentsWithOutputs(t *testing.T) {
 	t.Helper()
 
@@ -215,7 +208,7 @@ func TestFilterAllowedDocumentsWithOutputs(t *testing.T) {
 	fc := &fakeCerbosChecker{resp: resp}
 	client := &cerbosClient{checker: fc}
 	principal := cerbos.NewPrincipal("user", "admin")
-	allowed, err := client.filterAllowedDocuments(context.Background(), principal, []Document{{ID: "doc-1", AccountID: "acct-123"}}, "read")
+	allowed, err := client.filterAllowedDocuments(context.Background(), principal, []Document{{ID: "doc-1", AccountID: "acct-123"}}, "acct-123", "read")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

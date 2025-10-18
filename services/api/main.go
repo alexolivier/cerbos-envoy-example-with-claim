@@ -56,17 +56,28 @@ func newCerbosClient() *cerbosClient {
 	return &cerbosClient{checker: client}
 }
 
-func (c *cerbosClient) filterAllowedDocuments(ctx context.Context, principal *cerbos.Principal, docs []Document, action string) ([]Document, error) {
+func (c *cerbosClient) filterAllowedDocuments(ctx context.Context, principal *cerbos.Principal, docs []Document, accountId string, action string) ([]Document, error) {
 	if c == nil || c.checker == nil {
 		return nil, errors.New("cerbos checker not configured")
 	}
+	// In a real implementation, you'd likely want to use the PlanResources API
+	// to first determine which resources need to be checked based on policies.
+	// For simplicity, we'll check all documents here.
 
-	if len(docs) == 0 {
+	// filter documents by accountId
+	var filteredDocs []Document
+	for _, doc := range docs {
+		if doc.AccountID == accountId {
+			filteredDocs = append(filteredDocs, doc)
+		}
+	}
+
+	if len(filteredDocs) == 0 {
 		return []Document{}, nil
 	}
 
 	resourceBatch := cerbos.NewResourceBatch()
-	for _, doc := range docs {
+	for _, doc := range filteredDocs {
 		resource := cerbos.NewResource("document", doc.ID).WithAttributes(map[string]any{
 			"accountId": []string{doc.AccountID},
 			"status":    doc.Status,
@@ -88,8 +99,8 @@ func (c *cerbosClient) filterAllowedDocuments(ctx context.Context, principal *ce
 		return nil, fmt.Errorf("authorization check failed: %w", err)
 	}
 
-	allowed := make([]Document, 0, len(docs))
-	for _, doc := range docs {
+	allowed := make([]Document, 0, len(filteredDocs))
+	for _, doc := range filteredDocs {
 		result := checkResp.GetResource(doc.ID)
 		if result == nil {
 			continue
@@ -123,26 +134,6 @@ func main() {
 		c.String(http.StatusOK, "ok")
 	})
 
-	router.GET("/api/documents", func(c *gin.Context) {
-		principal, err := principalFromHeaders(c)
-		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
-			return
-		}
-
-		authCtx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
-		defer cancel()
-
-		allowedDocs, err := authzClient.filterAllowedDocuments(authCtx, principal, documents, "read")
-		if err != nil {
-			log.Printf("authorization error: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "authorization failure"})
-			return
-		}
-
-		mirrorHeadersWithPrefix(c, "x-authz-")
-		c.JSON(http.StatusOK, allowedDocs)
-	})
 	router.GET("/api/:accountID/documents", func(c *gin.Context) {
 		accountID := strings.TrimSpace(c.Param("accountID"))
 		principal, err := principalFromHeaders(c)
@@ -156,7 +147,7 @@ func main() {
 		authCtx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
 		defer cancel()
 
-		allowedDocs, err := authzClient.filterAllowedDocuments(authCtx, principal, documents, "read")
+		allowedDocs, err := authzClient.filterAllowedDocuments(authCtx, principal, documents, accountID, "read")
 		if err != nil {
 			log.Printf("authorization error: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "authorization failure"})
@@ -167,6 +158,12 @@ func main() {
 			"accountID": accountID,
 			"documents": allowedDocs,
 		})
+	})
+
+	// Access restricted to admins by the API gateway policy
+	router.GET("/api/admin", func(c *gin.Context) {
+		mirrorHeadersWithPrefix(c, "x-authz-")
+		c.JSON(http.StatusOK, gin.H{"message": "admin access granted"})
 	})
 
 	router.GET("/openapi.json", func(c *gin.Context) {
@@ -233,44 +230,14 @@ func parseRolesHeader(headerValue string) ([]string, error) {
 	}
 
 	var roles []string
-	if strings.HasPrefix(raw, "[") {
-		if err := json.Unmarshal([]byte(raw), &roles); err != nil {
-			return nil, fmt.Errorf("invalid roles header: %w", err)
-		}
-	} else {
-		for _, part := range strings.Split(raw, ",") {
-			part = strings.TrimSpace(part)
-			if part != "" {
-				roles = append(roles, part)
-			}
-		}
+
+	if err := json.Unmarshal([]byte(raw), &roles); err != nil {
+		return nil, fmt.Errorf("invalid roles header: %w", err)
 	}
 
-	roles = uniqueStrings(roles)
 	if len(roles) == 0 {
 		return nil, errors.New("no roles provided")
 	}
 
 	return roles, nil
-}
-
-func uniqueStrings(values []string) []string {
-	seen := make(map[string]struct{}, len(values))
-	result := make([]string, 0, len(values))
-
-	for _, value := range values {
-		value = strings.TrimSpace(value)
-		if value == "" {
-			continue
-		}
-
-		if _, ok := seen[value]; ok {
-			continue
-		}
-
-		seen[value] = struct{}{}
-		result = append(result, value)
-	}
-
-	return result
 }

@@ -29,7 +29,6 @@ const (
 	defaultListenAddr = ":9090"
 	defaultCerbosAddr = "cerbos:3593"
 	cerbosActionRoute = "route"
-	jwtAlgRS256       = "RS256"
 	jwtKeySetID       = "local-dev-cert"
 	fallbackHeaderKey = "output"
 )
