@@ -79,15 +79,6 @@ sequenceDiagram
 
 Stop the stack with `docker compose down` when you are done testing.
 
-### Downstream API (`services/api/main.go`)
-
-- Exposes `GET /healthz` (`ok` body), `GET /openapi.json`, `GET /api/documents`, and `GET /api/{accountId}/documents`. The OpenAPI document at `services/api/openapi.json` reflects the runtime behaviour.
-- Both `/api` endpoints require the adapter-populated `x-authz-id` and `x-authz-roles` headers. Roles must arrive as a JSON array. Optional account context is read from `x-authz-accountId` (or `z-authz-accountId` if Envoy rewrites headers).
-- Each account-scoped request is authorized by first scoping the in-memory dataset to the requested `accountID` and then sending a `CheckResources` call to Cerbos with `document` resources that include the document status and owning account. Regular users only receive `published` documents from their own account, while administrators bypass the status check and see everything for the requested account.
-- `GET /api/documents` returns the allowed documents as an array. `GET /api/{accountId}/documents` echoes the provided path parameter as `accountID` and returns the same filtered document list (with the additional `accountID` wrapper).
-- Document objects contain `id`, `accountId`, `title`, `body`, and `status` fields. All `x-authz-*` request headers are mirrored back into the HTTP response.
-- Missing or malformed authentication headers result in `401` responses (`{"error":"..."}`), while Cerbos connectivity or decision errors produce a `500` with the same error shape.
-
 ### Envoy external auth adapter (`services/envoy/adapter/main.go`)
 
 - Listens for Envoy ext_authz `CheckRequest` calls over gRPC (default `:9090`) and connects to Cerbos using the address from `CERBOS_GRPC_ADDR`/`CERBOS_ENDPOINT` or `cerbos:3593`.
@@ -102,6 +93,15 @@ Stop the stack with `docker compose down` when you are done testing.
 - `resource_policies/api_gateway.yaml:2-36` defines the ext_authz gate. Requests from `user` principals only pass through Envoy when the path starts with `/api/{accountId}/documents` for the same `accountId` that appears in the JWT, enforcing account-level routing at the gateway. `admin` principals are allowed to reach `/api/admin` and all other routes. Successful decisions return the JWT-derived headers plus a `x-authz-foo: bar` marker for debugging.
 - `resource_policies/document.yaml:2-21` governs the downstream API’s document filtering. Regular users can read documents when their principal `accountId` matches the document’s owning account and the document is `published`, so drafts and archived documents are hidden from them even after the gateway check. Administrators bypass these checks and receive every document scoped to the requested account.
 - The adapter supplies JWT claims as `request.auxData.jwt.*` and the downstream API adds the principal’s `accountId` attribute before asking Cerbos, so the two policies work together to restrict routing and document visibility.
+
+### Downstream API (`services/api/main.go`)
+
+- Exposes `GET /healthz` (`ok` body), `GET /openapi.json`, `GET /api/documents`, and `GET /api/{accountId}/documents`. The OpenAPI document at `services/api/openapi.json` reflects the runtime behaviour.
+- Both `/api` endpoints require the adapter-populated `x-authz-id` and `x-authz-roles` headers. Roles must arrive as a JSON array. Optional account context is read from `x-authz-accountId` (or `z-authz-accountId` if Envoy rewrites headers).
+- Each account-scoped request is authorized by first scoping the in-memory dataset to the requested `accountID` and then sending a `CheckResources` call to Cerbos with `document` resources that include the document status and owning account. Regular users only receive `published` documents from their own account, while administrators bypass the status check and see everything for the requested account.
+- `GET /api/documents` returns the allowed documents as an array. `GET /api/{accountId}/documents` echoes the provided path parameter as `accountID` and returns the same filtered document list (with the additional `accountID` wrapper).
+- Document objects contain `id`, `accountId`, `title`, `body`, and `status` fields. All `x-authz-*` request headers are mirrored back into the HTTP response.
+- Missing or malformed authentication headers result in `401` responses (`{"error":"..."}`), while Cerbos connectivity or decision errors produce a `500` with the same error shape.
 
 ### Example requests
 
