@@ -1,4 +1,4 @@
-name: E2E
+name: Tests
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
   pull_request: {}
 
 jobs:
-  e2e:
+  tests:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -17,8 +17,10 @@ jobs:
         with:
           go-version: '1.22.x'
 
-      - name: Run end-to-end tests
-        working-directory: test/e2e
-        env:
-          REPO_ROOT: ${{ github.workspace }}
-        run: go test -v ./...
+      - name: Run adapter unit tests
+        working-directory: services/envoy/adapter
+        run: go test ./...
+
+      - name: Run API unit tests
+        working-directory: services/api
+        run: go test ./...
