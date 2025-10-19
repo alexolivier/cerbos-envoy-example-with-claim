@@ -14,7 +14,7 @@ The result is an end-to-end architecture where policy logic lives once, while bo
 ```mermaid
 sequenceDiagram
     participant Client
-    participant Envoy as Envoy ext_authz filter
+    participant Envoy as Envoy + ext_authz filter
     participant Adapter as Envoy adapter (gRPC)
     participant API as Downstream API
     participant Cerbos as Cerbos PDP
